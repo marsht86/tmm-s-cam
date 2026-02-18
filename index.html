@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Black Screen Recorder</title>
+  <style>
+    body {
+      background-color: black;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      touch-action: manipulation;
+    }
+
+    #recordBtn {
+      background: none;
+      border: none;
+      font-size: 60px;
+      cursor: pointer;
+      margin-bottom: 30px;
+      padding: 20px;
+      line-height: 1;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+    }
+
+    video { display: none; }
+  </style>
+</head>
+<body>
+
+  <video id="preview" muted playsinline></video>
+  <button id="recordBtn" aria-label="Record">⚫️</button>
+
+  <script>
+    const btn = document.getElementById('recordBtn');
+    const videoElement = document.getElementById('preview');
+
+    let mediaRecorder;
+    let recordedChunks = [];
+    let stream = null;
+    let isRecording = false;
+
+    // Pick the best supported format on this device/browser
+    let chosenMime = 'video/webm';
+    let fileExt = 'webm';
+
+    try {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+        if (MediaRecorder.isTypeSupported('video/mp4')) {
+          chosenMime = 'video/mp4';
+          fileExt = 'mp4';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+          chosenMime = 'video/webm;codecs=vp9';
+          fileExt = 'webm';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+          chosenMime = 'video/webm';
+          fileExt = 'webm';
+        }
+      }
+    } catch (e) {}
+
+    btn.addEventListener('click', async () => {
+      if (!isRecording) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: { facingMode: "environment" }
+          });
+
+          videoElement.srcObject = stream;
+
+          const options = { mimeType: chosenMime };
+          mediaRecorder = new MediaRecorder(stream, options);
+
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) recordedChunks.push(event.data);
+          };
+
+          mediaRecorder.onstop = saveVideo;
+
+          mediaRecorder.start();
+          isRecording = true;
+          btn.innerHTML = "🔵";
+        } catch (err) {
+          console.error("Error accessing camera:", err);
+          alert("Error: Could not access camera/mic. Please ensure permissions are allowed and you are using HTTPS (e.g., GitHub Pages).");
+        }
+      } else {
+        try {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        } finally {
+          if (stream) stream.getTracks().forEach(track => track.stop());
+          isRecording = false;
+          btn.innerHTML = "⚫️";
+        }
+      }
+    });
+
+    function saveVideo() {
+      const blob = new Blob(recordedChunks, { type: chosenMime.includes('codecs') ? 'video/webm' : chosenMime });
+      recordedChunks = [];
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+
+      const date = new Date();
+      const filename = `recording_${date.getTime()}.${fileExt}`;
+      a.download = filename;
+
+      document.body.appendChild(a);
+      a.click();
+
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 200);
+    }
+  </script>
+</body>
+</html>
